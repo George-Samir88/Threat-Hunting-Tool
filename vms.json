@@ -5,49 +5,6 @@
     "port": 22,
     "username": "georgesamir",
     "key_path": "C:/Users/GeorgeSamir/.ssh/id_rsa",
-    "password": "1234"
-  },
-    {
-    "hostname": "Windows 10",
-    "host": "192.168.72.56",
-    "port": 22,
-    "username": "georgedsamir",
-    "key_path": "C:/Users/GeorgeSamir/.ssh/id_rsa",
-    "password": "12d34"
-  },  {
-    "hostname": "Centos-OS",
-    "host": "192.168.75.216",
-    "port": 22,
-    "username": "georgesamir",
-    "key_path": "C:/Users/GeorgeSamir/.ssh/id_rsa",
-    "password": "1234"
-  },  {
-    "hostname": "Ubuntu",
-    "host": "192.168.72.216",
-    "port": 22,
-    "username": "georgesamir",
-    "key_path": "C:/Users/GeorgeSamir/.ssh/id_rsa",
-    "password": "1234"
-  },  {
-    "hostname": "Kali-Linux Machine",
-    "host": "192.168.72.216",
-    "port": 22,
-    "username": "georgesamir",
-    "key_path": "C:/Users/GeorgeSamir/.ssh/id_rsa",
-    "password": "1234"
-  },  {
-    "hostname": "Kali-Linux Machine",
-    "host": "192.168.72.216",
-    "port": 22,
-    "username": "georgesamir",
-    "key_path": "C:/Users/GeorgeSamir/.ssh/id_rsa",
-    "password": "1234"
-  },  {
-    "hostname": "Kali-Linux Machine",
-    "host": "192.168.72.216",
-    "port": 22,
-    "username": "georgesamir",
-    "key_path": "C:/Users/GeorgeSamir/.ssh/id_rsa",
-    "password": "1234"
+    "password": null
   }
 ]
