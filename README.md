@@ -158,7 +158,7 @@ Add a second adapter set to **Host-Only** — the VM gets a real `192.168.x.x` I
 
 **George Samir**  
 Cybersecurity Threat Hunting & Incident Response  
-[LinkedIn](https://linkedin.com/in/george-samir) · [GitHub](https://github.com/George-Samir88)
+[LinkedIn](https://linkedin.com/in/george-samir976327) · [GitHub](https://github.com/George-Samir88)
 
 ---
 
