@@ -1,6 +1,6 @@
 # ⚡ ThreatHunter — VM Fleet Threat Hunting Tool
 
-A dark-themed desktop GUI for running automated threat hunting checks across multiple Linux VMs over SSH. Built with Python and `customtkinter`.
+A dark-themed desktop GUI for running automated threat hunting checks across multiple Linux VMs over SSH. Built with Python, `customtkinter`, and `fabric`.
 
 ---
 
@@ -8,29 +8,58 @@ A dark-themed desktop GUI for running automated threat hunting checks across mul
 
 - **VM Fleet Panel** — manage multiple VMs from a single dashboard, each displayed as a live status card
 - **Connectivity Test** — test SSH access per VM or all at once (`hostname && uptime`)
-- **Automated Hunt Engine** — runs 9 security checks per VM in background threads (GUI never freezes)
-- **Auto Report Popup** — report window opens automatically when hunting completes
+- **Automated Hunt Engine** — runs 8 security checks per VM in background threads (GUI never freezes)
+- **Auto Report Popup** — report window opens automatically when hunting completes, stays focused
 - **Save Reports** — export findings as `.txt` or `.json` with timestamped filenames
 - **Save All** — bulk export reports for all VMs to a chosen folder
 - **Dark Theme** — GitHub-style dark UI built with `customtkinter`
+- **Lab Setup Script** — one command configures SSH key auth and injects realistic log noise on target VMs
 
 ---
 
-## 🔍 Hunt Checks
+## 🔍 Hunt Checks (8 Checks)
 
 | # | Check | Severity | Source |
 |---|-------|----------|--------|
-| 1 | Failed SSH Logins | HIGH | `/var/log/auth.log` |
-| 2 | Successful Logins | INFO | `/var/log/auth.log` |
-| 3 | Sudo Escalations | MEDIUM | `/var/log/auth.log` |
-| 4 | Cron Job Activity | LOW | `/var/log/syslog` |
-| 5 | New User / Group Changes | HIGH | `/var/log/auth.log` |
-| 6 | Kernel / OOM Events | MEDIUM | `/var/log/kern.log` |
-| 7 | Network Listening Ports | INFO | `ss -tlnp` (live) |
-| 8 | Recently Modified /etc Files | MEDIUM | `find /etc` (live) |
-| 9 | SUID / SGID Binaries | HIGH | `find /usr /bin ...` (live) |
+| 1 | SSH Brute Force (5+ failures from same IP) | HIGH / MEDIUM | `/var/log/auth.log` or `/var/log/secure` |
+| 2 | Successful Login After Failures | HIGH | `/var/log/auth.log` or `/var/log/secure` |
+| 3 | Sudo Abuse (non-admin users, auth failures) | HIGH | `/var/log/auth.log` or `/var/log/secure` |
+| 4 | New User / Group Created | HIGH | `/var/log/auth.log` or `/var/log/secure` |
+| 5 | Unexpected Cron Entries (off-hours / non-root) | MEDIUM | `/var/log/cron` or spool |
+| 6 | Unexpected Package Activity | MEDIUM | `/var/log/yum.log` or `dpkg.log` |
+| 7 | Auditd Privilege Escalation | HIGH | `/var/log/audit/audit.log` |
+| 8 | Suspicious Bash History | HIGH | `~/.bash_history` |
 
-Checks fall back to alternative log paths automatically (e.g. `/var/log/secure` on RHEL/CentOS). Missing log files are skipped and noted in the report.
+Each check falls back to alternative log paths automatically. Missing files are skipped and noted in the report.
+
+---
+
+## 📁 Project Structure
+
+```
+Final Project/
+├── main.py                  # Entry point — launches the GUI
+├── vms.json                 # VM connection config (do not commit)
+├── vms.example.json         # Safe example config (commit this)
+├── requirements.txt
+├── README.md
+├── gui/
+│   ├── __init__.py
+│   ├── app.py               # Main window, layout, queue polling loop
+│   ├── vm_card.py           # Per-VM card widget
+│   └── report_panel.py      # Report display + save logic
+├── hunting/
+│   ├── __init__.py
+│   ├── engine.py            # Orchestrates checks per VM, returns Report
+│   ├── checks.py            # All 8 individual check functions
+│   └── models.py            # Finding + Report dataclasses
+├── transport/
+│   ├── __init__.py
+│   └── ssh.py               # Fabric SSH wrapper (connect, run, fetch_log)
+└── setup/
+    ├── __init__.py
+    └── setup_lab.py         # Lab environment setup script
+```
 
 ---
 
@@ -49,7 +78,7 @@ Checks fall back to alternative log paths automatically (e.g. `/var/log/secure` 
 git clone https://github.com/George-Samir88/ThreatHunter.git
 cd ThreatHunter
 
-# 2. (Recommended) Create a virtual environment
+# 2. Create a virtual environment (recommended)
 python -m venv venv
 
 # Windows
@@ -79,67 +108,118 @@ Edit `vms.json`:
     "host": "192.168.72.216",
     "port": 22,
     "username": "georgesamir",
-    "key_path": "~/.ssh/id_rsa",
+    "key_path": "~/.ssh/id_ed25519",
     "password": null
-  },
-  {
-    "hostname": "ubuntu-soc",
-    "host": "10.0.0.5",
-    "port": 22,
-    "username": "analyst",
-    "key_path": null,
-    "password": "yourpassword"
   }
 ]
 ```
 
 | Field | Description |
 |-------|-------------|
-| `hostname` | Display name shown in the GUI |
-| `host` | IP address or hostname of the VM |
+| `hostname` | Display name shown in the GUI card |
+| `host` | IP address of the VM |
 | `port` | SSH port (default `22`) |
 | `username` | SSH login username |
-| `key_path` | Path to private key file — use `null` if not applicable |
-| `password` | SSH password — use `null` if using key only |
+| `key_path` | Path to private key — `null` if not used |
+| `password` | SSH password — `null` if using key only |
 
-> ⚠️ **`vms.json` is in `.gitignore`** — your credentials will never be committed to the repo.
-
-### Run
-
-```bash
-python project.py
-```
+> ⚠️ **`vms.json` is in `.gitignore`** — your credentials will never be committed.
 
 ---
 
-## 📁 Project Structure
+## 🧪 Lab Setup (SSH Key + Log Injection)
 
+Before hunting, run the setup script once to:
+1. Generate an SSH keypair (if you don't have one)
+2. Push your public key to the VM's `authorized_keys` using password auth
+3. Inject realistic suspicious log entries across all 8 log targets
+4. Verify key-based auth works
+
+```bash
+python setup/setup_lab.py --key ~/.ssh/id_ed25519
 ```
-ThreatHunter/
-├── project.py           # Main application
-├── vms.json             # Your VM config (ignored by git)
-├── vms.example.json     # Safe example config (committed)
-├── requirements.txt     # Python dependencies
-└── README.md
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `--key` | Path to local SSH private key (default: `~/.ssh/id_ed25519`) |
+| `--vm` | Target only one VM by hostname |
+| `--password` | SSH password (prompted securely if not provided) |
+| `--inject-only` | Skip key setup, only inject logs |
+| `--vms-file` | Path to vms.json (default: `vms.json`) |
+
+After setup completes, update `vms.json` to set `"password": null` — key auth is now configured.
+
+---
+
+## ▶️ Running the GUI
+
+```bash
+python main.py
 ```
+
+> **If you see `ModuleNotFoundError: No module named 'gui'`** — make sure you run from
+> the project root and that `__init__.py` files exist in each subfolder:
+> ```powershell
+> cd "C:\Users\YourName\Desktop\Final Project"
+> New-Item -Path "gui\__init__.py" -ItemType File -Force
+> New-Item -Path "hunting\__init__.py" -ItemType File -Force
+> New-Item -Path "transport\__init__.py" -ItemType File -Force
+> python main.py
+> ```
+> Alternatively, add these two lines at the very top of `main.py`:
+> ```python
+> import sys, os
+> sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+> ```
+
+---
+
+## 🏗️ Architecture
+
+### Threading Model
+- Each hunt runs in a background `threading.Thread` — the GUI never freezes
+- Worker threads communicate with the main thread via `queue.Queue`
+- The main window polls the queue every 100ms with `root.after(100, poll_queue)`
+- **Tkinter is not thread-safe** — widgets are only updated from the main thread
+
+### SSH Transport
+- `transport/ssh.py` wraps Fabric's `Connection`
+- `fetch_log()` pulls remote log files locally via `Connection.get()` then parses in Python
+- More reliable than streaming grep over a live SSH channel
+
+### Data Models
+- `Finding` and `Report` are Python `dataclasses`
+- Clean field access and JSON serialization via `dataclasses.asdict()`
+
+### Check Baselines
+Each check uses a customizable known-good baseline defined at the top of `hunting/checks.py`:
+
+| Baseline | Purpose |
+|----------|---------|
+| `EXPECTED_SUDO_USERS` | Users allowed to run sudo without alerting |
+| `KNOWN_GOOD_CRON_USERS` | Users allowed to have scheduled cron jobs |
+| `KNOWN_GOOD_PACKAGES` | Packages that should not trigger alerts |
+
+Edit these to match your environment before running hunts.
 
 ---
 
 ## 🖥️ VirtualBox Networking Note
 
-If your VM uses **NAT** (default VirtualBox setting), it won't be directly reachable from your host. Two options:
+If your VM uses **NAT** (default), it won't be reachable from your host machine.
 
-**Option A — Port Forwarding**
-In VirtualBox: Settings → Network → Adapter 1 → Advanced → Port Forwarding
+**Recommended — Host-Only Adapter:**
+Add Adapter 2 in VirtualBox → Network → Host-Only. The VM gets a `192.168.x.x` IP reachable directly on port 22.
+
+**Alternative — Port Forwarding:**
 
 | Name | Protocol | Host IP | Host Port | Guest Port |
 |------|----------|---------|-----------|------------|
 | SSH | TCP | 127.0.0.1 | 2222 | 22 |
 
 Then use `"host": "127.0.0.1"` and `"port": 2222` in `vms.json`.
-
-**Option B — Host-Only Adapter (recommended)**
-Add a second adapter set to **Host-Only** — the VM gets a real `192.168.x.x` IP reachable directly on port 22.
 
 ---
 
@@ -156,9 +236,10 @@ Add a second adapter set to **Host-Only** — the VM gets a real `192.168.x.x` I
 
 ## 👤 Author
 
-**George Samir**  
-Cybersecurity Threat Hunting & Incident Response  
-[LinkedIn](https://linkedin.com/in/george-samir976327) · [GitHub](https://github.com/George-Samir88)
+**George Samir**
+Cybersecurity Threat Hunting & Incident Response
+NTI — Threat Hunting & Incident Response Track
+[LinkedIn](https://linkedin.com/in/george-samir) · [GitHub](https://github.com/George-Samir88)
 
 ---
 
