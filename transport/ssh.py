@@ -1,6 +1,6 @@
 """
 transport/ssh.py — Fabric SSH wrapper
-Handles connect, run_command, fetch_log with clean error handling.
+Handles connect, run_command, run_sudo, fetch_log with clean error handling.
 """
 import os
 import tempfile
@@ -56,6 +56,25 @@ class SSHTransport:
         """Run a command. Returns (success, stdout_or_error)."""
         try:
             r = self._conn.run(cmd, hide=True, warn=True, timeout=timeout)
+            return True, r.stdout.strip()
+        except Exception as e:
+            return False, str(e)
+
+    def run_sudo(self, cmd: str, timeout: int = 30) -> Tuple[bool, str]:
+        """
+        Run a privileged command via Fabric's sudo runner.
+        Uses self.password for the sudo prompt if set, otherwise relies on
+        NOPASSWD sudoers configuration.
+        Returns (success, stdout_or_error).
+        """
+        try:
+            r = self._conn.sudo(
+                cmd,
+                hide=True,
+                warn=True,
+                timeout=timeout,
+                password=self.password or "",
+            )
             return True, r.stdout.strip()
         except Exception as e:
             return False, str(e)
