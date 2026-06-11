@@ -180,9 +180,11 @@ def check_sudo_abuse(ssh: SSHTransport) -> Finding:
     evidence = []
     patterns = [
         # PID bracket is optional — logger-injected lines omit it.
-        # Negative lookahead (?!.*COMMAND=) prevents false positives where
-        # "NOT in sudoers" appears embedded inside the COMMAND= payload text.
-        (re.compile(r"\bsudo(?:\[\d+\])?:\s+(\S+)\s+:(?!.*COMMAND=).*NOT in sudoers", re.IGNORECASE),
+        # Match "NOT in sudoers" regardless of whether COMMAND= is present —
+        # some distros log the attempted command even on rejection.
+        # False positives from embedded script text are blocked by requiring
+        # the syslog tag to be exactly "sudo:" or "sudo[PID]:" at the start.
+        (re.compile(r"\bsudo(?:\[\d+\])?:\s+(\S+)\s+:.*?NOT in sudoers", re.IGNORECASE),
          "User NOT in sudoers"),
         (re.compile(r"\bsudo(?:\[\d+\])?\b.*pam_unix.*authentication failure.*user=(\S+)", re.IGNORECASE),
          "Sudo auth failure"),
@@ -254,7 +256,8 @@ def check_suspicious_cron(ssh: SSHTransport) -> Finding:
     spool_dir      = None
     try:
         for candidate in CRON_SPOOL_DIRS:
-            ok, out = ssh.run_sudo(f"ls -1 {candidate} 2>/dev/null")
+            # run_sudo uses Fabric's sudo runner with pty=True — password coerced to str
+            ok, out = ssh.run_sudo(f"ls -1 {candidate}")
             if ok and out and out.strip():
                 spool_dir = candidate
                 users     = out
@@ -266,15 +269,15 @@ def check_suspicious_cron(ssh: SSHTransport) -> Finding:
                 if not user:
                     continue
                 cron_path = f"{spool_dir}/{user}"
-                # crontab files are -rw------- so cat fails even with sudo.
-                # Use "sudo crontab -u <user> -l" which always works.
-                ok, spool = ssh.run_sudo(f"crontab -u {user} -l 2>/dev/null")
+                # crontab -l is the only reliable way to read crontab files
+                # (-rw------- perms block even root via cat)
+                ok, spool = ssh.run_sudo(f"crontab -u {user} -l")
                 if not ok or not spool:
                     continue
                 for line in spool.splitlines():
                     line = line.strip()
                     if line and not line.startswith("#"):
-                        spool_evidence.append(f"[{cron_path}] {line}")
+                        spool_evidence.append(f"[crontab:{user}] {line}")
     except Exception:
         pass
 

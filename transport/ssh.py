@@ -5,7 +5,7 @@ Handles connect, run_command, run_sudo, fetch_log with clean error handling.
 import os
 import tempfile
 from typing import Optional, Tuple
-from fabric import Connection
+from fabric import Connection, Config
 from paramiko.ssh_exception import (
     AuthenticationException, NoValidConnectionsError, SSHException
 )
@@ -34,10 +34,14 @@ class SSHTransport:
         return kw
 
     def connect(self) -> None:
+        # Pass sudo password via Fabric Config so sudo runner handles
+        # the prompt correctly without needing a PTY or -S flag
+        config = Config(overrides={"sudo": {"password": self.password or ""}})
         self._conn = Connection(
             host=self.host,
             user=self.username,
             port=self.port,
+            config=config,
             connect_kwargs=self._connect_kwargs(),
             connect_timeout=self.timeout,
         )
@@ -63,18 +67,11 @@ class SSHTransport:
     def run_sudo(self, cmd: str, timeout: int = 30) -> Tuple[bool, str]:
         """
         Run a privileged command via Fabric's sudo runner.
-        Uses self.password for the sudo prompt if set, otherwise relies on
-        NOPASSWD sudoers configuration.
+        Password is supplied via Config at connect time — no PTY needed.
         Returns (success, stdout_or_error).
         """
         try:
-            r = self._conn.sudo(
-                cmd,
-                hide=True,
-                warn=True,
-                timeout=timeout,
-                password=self.password or "",
-            )
+            r = self._conn.sudo(cmd, hide=True, warn=True, timeout=timeout)
             return True, r.stdout.strip()
         except Exception as e:
             return False, str(e)
