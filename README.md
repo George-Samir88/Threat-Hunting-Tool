@@ -258,7 +258,7 @@ Then use `"host": "127.0.0.1"` and `"port": 2222` in `vms.json`.
 **George Samir**
 Cybersecurity Threat Hunting & Incident Response
 NTI — Threat Hunting & Incident Response Track
-[LinkedIn](https://linkedin.com/in/george-samir) · [GitHub](https://github.com/George-Samir88)
+[LinkedIn](https://linkedin.com/in/george-samir976327/) · [GitHub](https://github.com/George-Samir88)
 
 ---
 
