@@ -6,13 +6,13 @@ A dark-themed desktop GUI for running automated threat hunting checks across mul
 
 ## 📸 Features
 
-- **VM Fleet Panel** — manage multiple VMs from a single dashboard, each displayed as a live status card
+- **Sidebar VM Fleet** — manage multiple VMs from a single dashboard, each shown as a card with a live status dot and a mini severity bar chart (HIGH/MEDIUM/LOW/INFO)
 - **Connectivity Test** — test SSH access per VM or all at once (`hostname && uptime`)
 - **Automated Hunt Engine** — runs 8 security checks per VM in background threads (GUI never freezes)
-- **Auto Report Popup** — report window opens automatically when hunting completes, stays focused
+- **Auto Report Popup** — report window opens automatically when hunting completes, with a severity chart sidebar and per-check finding cards
 - **Save Reports** — export findings as `.txt` or `.json` with timestamped filenames
 - **Save All** — bulk export reports for all VMs to a chosen folder
-- **Dark Theme** — GitHub-style dark UI built with `customtkinter`
+- **Dark Theme** — modern dark UI built with `customtkinter`
 - **Lab Setup Script** — one command configures SSH key auth and injects realistic log noise on target VMs
 
 ---
@@ -25,12 +25,12 @@ A dark-themed desktop GUI for running automated threat hunting checks across mul
 | 2 | Successful Login After Failures | HIGH | `/var/log/auth.log` or `/var/log/secure` |
 | 3 | Sudo Abuse (non-admin users, auth failures) | HIGH | `/var/log/auth.log` or `/var/log/secure` |
 | 4 | New User / Group Created | HIGH | `/var/log/auth.log` or `/var/log/secure` |
-| 5 | Unexpected Cron Entries (off-hours / non-root) | MEDIUM | `/var/log/cron` or spool |
-| 6 | Unexpected Package Activity | MEDIUM | `/var/log/yum.log` or `dpkg.log` |
+| 5 | Unexpected Cron Entries (off-hours / non-root) | MEDIUM | `/var/log/syslog`, `/var/log/cron`, and cron spool |
+| 6 | Unexpected Package Activity | MEDIUM | `/var/log/dpkg.log`, `/var/log/yum.log`, or `dnf.log` |
 | 7 | Auditd Privilege Escalation | HIGH | `/var/log/audit/audit.log` |
-| 8 | Suspicious Bash History | HIGH | `~/.bash_history` |
+| 8 | Suspicious Bash History | HIGH | `/home/<user>/.bash_history` or `/root/.bash_history` |
 
-Each check falls back to alternative log paths automatically. Missing files are skipped and noted in the report.
+Each check falls back to alternative log paths automatically. Missing files are skipped and noted in the report. All log reads go through `sudo cat`, since most of these files are root-owned.
 
 ---
 
@@ -45,9 +45,9 @@ Final Project/
 ├── README.md
 ├── gui/
 │   ├── __init__.py
-│   ├── app.py               # Main window, layout, queue polling loop
-│   ├── vm_card.py           # Per-VM card widget
-│   └── report_panel.py      # Report display + save logic
+│   ├── app.py               # Main window — sidebar + report area, queue polling loop
+│   ├── vm_card.py           # Per-VM card widget with mini severity chart
+│   └── report_panel.py      # Report popup — severity sidebar + finding cards
 ├── hunting/
 │   ├── __init__.py
 │   ├── engine.py            # Orchestrates checks per VM, returns Report
@@ -55,7 +55,7 @@ Final Project/
 │   └── models.py            # Finding + Report dataclasses
 ├── transport/
 │   ├── __init__.py
-│   └── ssh.py               # Fabric SSH wrapper (connect, run, fetch_log)
+│   └── ssh.py               # Fabric SSH wrapper (connect, run_command, run_sudo, fetch_log)
 └── setup/
     ├── __init__.py
     └── setup_lab.py         # Lab environment setup script
@@ -109,7 +109,7 @@ Edit `vms.json`:
     "port": 22,
     "username": "georgesamir",
     "key_path": "~/.ssh/id_ed25519",
-    "password": null
+    "password": "your_password_here"
   }
 ]
 ```
@@ -121,9 +121,13 @@ Edit `vms.json`:
 | `port` | SSH port (default `22`) |
 | `username` | SSH login username |
 | `key_path` | Path to private key — `null` if not used |
-| `password` | SSH password — `null` if using key only |
+| `password` | SSH password — **required**, used for `sudo` when reading logs |
 
 > ⚠️ **`vms.json` is in `.gitignore`** — your credentials will never be committed.
+>
+> Keep `password` set even after SSH keys are configured — the tool runs every log
+> read through `sudo cat`, and sudo needs a password unless NOPASSWD is configured
+> for your user.
 
 ---
 
@@ -149,7 +153,14 @@ Options:
 | `--inject-only` | Skip key setup, only inject logs |
 | `--vms-file` | Path to vms.json (default: `vms.json`) |
 
-After setup completes, update `vms.json` to set `"password": null` — key auth is now configured.
+> **On Kali**, `auth.log` only gets populated if `rsyslog` is installed and running —
+> Kali doesn't enable it by default:
+> ```bash
+> sudo apt update && sudo apt install rsyslog -y
+> sudo systemctl enable rsyslog --now
+> ```
+> Verify with `sudo tail /var/log/auth.log` before running a hunt. If it's empty,
+> checks 1–4 will show as skipped.
 
 ---
 
@@ -186,8 +197,16 @@ python main.py
 
 ### SSH Transport
 - `transport/ssh.py` wraps Fabric's `Connection`
-- `fetch_log()` pulls remote log files locally via `Connection.get()` then parses in Python
-- More reliable than streaming grep over a live SSH channel
+- `run_command()` for normal commands, `run_sudo()` for privileged reads
+- `fetch_log()` reads remote files via `sudo cat` — most logs (`auth.log`, `secure`,
+  `audit.log`) are root-owned (`0640` or tighter), so SFTP `get()` fails on them
+- Cron spool entries are read with `sudo cat /var/spool/cron/crontabs/<user>`
+  (Debian/Kali) or `/var/spool/cron/<user>` (RHEL/CentOS) — both are tried
+
+### GUI Layout
+- Sidebar (left): VM fleet cards + live summary bar (VM count, Done count, HIGH/MEDIUM totals)
+- Main panel (right): top bar with current report summary, welcome screen until first hunt, console log at the bottom
+- Report popup: severity bar chart + per-check checklist on the left, scrollable finding cards on the right — each card is colored by severity and shows evidence inline
 
 ### Data Models
 - `Finding` and `Report` are Python `dataclasses`
