@@ -122,11 +122,11 @@ class ThreatHunterApp(ctk.CTk):
         logo.grid(row=0, column=0, sticky="ew")
         logo.grid_propagate(False)
         ctk.CTkLabel(logo, text="⚡ ThreatHunter",
-                     font=("JetBrains Mono", 15, "bold"),
+                     font=("JetBrains Mono", 16, "bold"),
                      text_color=C["accent"]).place(x=16, rely=0.5, anchor="w")
         ctk.CTkLabel(logo, text="v3.0",
-                     font=("Consolas", 10),
-                     text_color=C["text_muted"]).place(relx=1, x=-14, rely=0.5, anchor="e")
+                     font=("Consolas", 11),
+                     text_color=C["text_dim"]).place(relx=1, x=-14, rely=0.5, anchor="e")
 
         # Summary bar
         self._sum_frame = ctk.CTkFrame(sidebar, fg_color=C["card"],
@@ -139,10 +139,10 @@ class ThreatHunterApp(ctk.CTk):
         vm_hdr = ctk.CTkFrame(sidebar, fg_color="transparent", height=28)
         vm_hdr.grid(row=2, column=0, sticky="ew", padx=12, pady=(10, 0))
         ctk.CTkLabel(vm_hdr, text="VM FLEET",
-                     font=("Consolas", 9, "bold"),
-                     text_color=C["text_muted"]).place(x=0, rely=0.5, anchor="w")
+                     font=("Consolas", 10, "bold"),
+                     text_color=C["text_dim"]).place(x=0, rely=0.5, anchor="w")
         self.lbl_count = ctk.CTkLabel(vm_hdr, text="",
-                                       font=("Consolas", 9),
+                                       font=("Consolas", 10),
                                        text_color=C["accent"])
         self.lbl_count.place(relx=1, rely=0.5, anchor="e")
 
@@ -157,8 +157,8 @@ class ThreatHunterApp(ctk.CTk):
         chart_hdr = ctk.CTkFrame(sidebar, fg_color="transparent", height=20)
         chart_hdr.grid(row=4, column=0, sticky="ew", padx=12, pady=(4, 0))
         ctk.CTkLabel(chart_hdr, text="FLEET DASHBOARD",
-                     font=("Consolas", 9, "bold"),
-                     text_color=C["text_muted"]).pack(anchor="w")
+                     font=("Consolas", 10, "bold"),
+                     text_color=C["text_dim"]).pack(anchor="w")
 
         chart_wrap = ctk.CTkFrame(sidebar, fg_color="transparent")
         chart_wrap.grid(row=5, column=0, sticky="nsew", padx=8, pady=(4, 4))
@@ -173,7 +173,7 @@ class ThreatHunterApp(ctk.CTk):
         btn_area.grid_propagate(False)
         btn_area.grid_columnconfigure((0, 1), weight=1)
 
-        btn_cfg = dict(font=("Consolas", 11), height=34, corner_radius=6)
+        btn_cfg = dict(font=("Consolas", 12), height=34, corner_radius=6)
 
         ctk.CTkButton(btn_area, text="🔗  Test All",
                       fg_color=C["panel"], hover_color="#1e293b",
@@ -218,16 +218,16 @@ class ThreatHunterApp(ctk.CTk):
 
         self.lbl_topbar = ctk.CTkLabel(topbar,
                                         text="Select a VM and run Hunt to begin",
-                                        font=("Consolas", 12),
+                                        font=("Consolas", 13),
                                         text_color=C["text_dim"])
         self.lbl_topbar.place(x=16, rely=0.5, anchor="w")
 
         fab_color = C["green"] if FABRIC_OK else C["red"]
         fab_text  = "Fabric connected" if FABRIC_OK else "Fabric not installed"
-        ctk.CTkLabel(topbar, text="●", font=("Consolas", 12),
+        ctk.CTkLabel(topbar, text="●", font=("Consolas", 13),
                      text_color=fab_color).place(relx=1, x=-120, rely=0.5, anchor="w")
-        ctk.CTkLabel(topbar, text=fab_text, font=("Consolas", 10),
-                     text_color=C["text_muted"]).place(relx=1, x=-104, rely=0.5, anchor="w")
+        ctk.CTkLabel(topbar, text=fab_text, font=("Consolas", 11),
+                     text_color=C["text_dim"]).place(relx=1, x=-104, rely=0.5, anchor="w")
 
         # Content area — welcome screen, re-centers on resize
         content = ctk.CTkFrame(main, fg_color="transparent")
@@ -251,14 +251,14 @@ class ThreatHunterApp(ctk.CTk):
         log_hdr = ctk.CTkFrame(log_wrap, fg_color="transparent", height=28)
         log_hdr.grid(row=0, column=0, sticky="ew", padx=12, pady=(6, 0))
         ctk.CTkLabel(log_hdr, text="CONSOLE",
-                     font=("Consolas", 9, "bold"),
-                     text_color=C["text_muted"]).pack(side="left")
+                     font=("Consolas", 10, "bold"),
+                     text_color=C["text_dim"]).pack(side="left")
         ctk.CTkButton(log_hdr, text="Clear", width=44, height=18,
-                      font=("Consolas", 9), fg_color="transparent",
-                      hover_color=C["card"], text_color=C["text_muted"],
+                      font=("Consolas", 10), fg_color="transparent",
+                      hover_color=C["card"], text_color=C["text_dim"],
                       command=self._clear_log).pack(side="right")
 
-        self.log_box = ctk.CTkTextbox(log_wrap, font=("Consolas", 10),
+        self.log_box = ctk.CTkTextbox(log_wrap, font=("Consolas", 11),
                                       fg_color="transparent",
                                       text_color=C["text_dim"],
                                       corner_radius=0)
@@ -283,10 +283,10 @@ class ThreatHunterApp(ctk.CTk):
         for i, (label, val, color) in enumerate(stats):
             f = ctk.CTkFrame(self._sum_frame, fg_color="transparent")
             f.place(relx=i/4, rely=0, relwidth=0.25, relheight=1)
-            ctk.CTkLabel(f, text=str(val), font=("JetBrains Mono", 18, "bold"),
+            ctk.CTkLabel(f, text=str(val), font=("JetBrains Mono", 19, "bold"),
                          text_color=color).place(relx=0.5, rely=0.35, anchor="center")
-            ctk.CTkLabel(f, text=label, font=("Consolas", 8),
-                         text_color=C["text_muted"]).place(relx=0.5, rely=0.78, anchor="center")
+            ctk.CTkLabel(f, text=label, font=("Consolas", 9),
+                         text_color=C["text_dim"]).place(relx=0.5, rely=0.78, anchor="center")
 
     def _update_summary(self):
         self._build_summary_bar()
@@ -313,14 +313,14 @@ class ThreatHunterApp(ctk.CTk):
         # with relative coords that drifted on resize
         inner.grid(row=0, column=0)
 
-        ctk.CTkLabel(inner, text="⚡", font=("Consolas", 48),
+        ctk.CTkLabel(inner, text="⚡", font=("Consolas", 50),
                      text_color=C["border"]).pack()
         ctk.CTkLabel(inner, text="No hunt results yet",
-                     font=("JetBrains Mono", 16),
-                     text_color=C["text_muted"]).pack(pady=(8, 4))
+                     font=("JetBrains Mono", 17),
+                     text_color=C["text_dim"]).pack(pady=(8, 4))
         ctk.CTkLabel(inner, text="Select a VM from the sidebar and click Hunt",
-                     font=("Consolas", 11),
-                     text_color=C["text_muted"]).pack()
+                     font=("Consolas", 12),
+                     text_color=C["text_dim"]).pack()
 
     def _show_dashboard(self):
         """Once we have at least one result, swap the welcome hint text."""

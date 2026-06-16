@@ -120,12 +120,12 @@ class ReportWindow(ctk.CTkToplevel):
         info_col.grid(row=0, column=0, sticky="w", padx=16, pady=10)
         ctk.CTkLabel(info_col,
                      text=f"⚡  {self.report.vm}",
-                     font=("JetBrains Mono", 14, "bold"),
+                     font=("JetBrains Mono", 16, "bold"),
                      text_color=C["accent"]).pack(anchor="w")
         ctk.CTkLabel(info_col,
                      text=f"{self.report.host}  ·  {self.report.timestamp}",
-                     font=("Consolas", 10),
-                     text_color=C["text_muted"]).pack(anchor="w")
+                     font=("Consolas", 11),
+                     text_color=C["text_dim"]).pack(anchor="w")
 
         # Severity pills
         if not self.report.error:
@@ -141,13 +141,13 @@ class ReportWindow(ctk.CTkToplevel):
                                     border_width=1, border_color=C[sev])
                 pill.pack(side="left", padx=4)
                 ctk.CTkLabel(pill, text=f"  {sev}: {count}  ",
-                             font=("Consolas", 11, "bold"),
+                             font=("Consolas", 12, "bold"),
                              text_color=C[sev]).pack(padx=2, pady=4)
 
         # Save buttons
         btn_row = ctk.CTkFrame(hdr, fg_color="transparent")
         btn_row.grid(row=0, column=2, sticky="e", padx=16, pady=10)
-        b_cfg = dict(font=("Consolas", 11), height=30, corner_radius=6,
+        b_cfg = dict(font=("Consolas", 12), height=30, corner_radius=6,
                      border_width=1)
         ctk.CTkButton(btn_row, text="Save .txt", width=88,
                       fg_color="transparent", hover_color=C["card"],
@@ -167,7 +167,7 @@ class ReportWindow(ctk.CTkToplevel):
         body.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(body,
                      text=f"Connection Error:\n{self.report.error}",
-                     font=("Consolas", 12),
+                     font=("Consolas", 13),
                      text_color=C["red"],
                      wraplength=600, justify="center"
                      ).grid(row=0, column=0)
@@ -236,8 +236,8 @@ class ReportWindow(ctk.CTkToplevel):
 
     def _add_chart_title(self, widget, text):
         """Small label overlay for the donut (which has no built-in title)."""
-        lbl = ctk.CTkLabel(widget, text=text, font=("Consolas", 8, "bold"),
-                           text_color=C["text_muted"])
+        lbl = ctk.CTkLabel(widget, text=text, font=("Consolas", 9, "bold"),
+                           text_color=C["text_dim"])
         lbl.place(relx=0.5, y=6, anchor="n")
 
     # ── Findings List ──────────────────────────────────────────────────────────
@@ -248,8 +248,8 @@ class ReportWindow(ctk.CTkToplevel):
         wrap.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(wrap, text="DETAILED FINDINGS",
-                     font=("Consolas", 9, "bold"),
-                     text_color=C["text_muted"]
+                     font=("Consolas", 10, "bold"),
+                     text_color=C["text_dim"]
                      ).grid(row=0, column=0, sticky="w", pady=(2, 4))
 
         scroll = ctk.CTkScrollableFrame(wrap, fg_color="transparent",
@@ -272,33 +272,33 @@ class ReportWindow(ctk.CTkToplevel):
         card.columnconfigure(1, weight=1)
 
         sev_label = ctk.CTkLabel(card, text=f" {f.severity} ",
-                                 font=("Consolas", 9, "bold"),
+                                 font=("Consolas", 10, "bold"),
                                  fg_color=C[f.severity] if has_evidence else C["card"],
-                                 text_color=C["bg"] if has_evidence else C["text_muted"],
+                                 text_color="#0a0e1a" if has_evidence else C["text_dim"],
                                  corner_radius=4)
         sev_label.grid(row=0, column=0, padx=(10, 8), pady=(10, 0), sticky="nw")
 
         ctk.CTkLabel(card, text=f"Check {f.check_id}: {f.check_name}",
-                     font=("JetBrains Mono", 11, "bold"),
+                     font=("JetBrains Mono", 12, "bold"),
                      text_color=C["text"] if has_evidence else C["text_dim"],
                      anchor="w"
                      ).grid(row=0, column=1, sticky="w", pady=(10, 0))
 
         ctk.CTkLabel(card, text=f.description or "",
-                     font=("Consolas", 9),
+                     font=("Consolas", 10),
                      text_color=C["text_dim"],
                      anchor="w", wraplength=700
                      ).grid(row=1, column=1, sticky="w", padx=(0, 10))
 
         if f.skipped:
             ctk.CTkLabel(card, text=f"⊘  {f.skip_reason}",
-                         font=("Consolas", 9),
-                         text_color=C["text_muted"],
+                         font=("Consolas", 10),
+                         text_color=C["text_dim"],
                          anchor="w"
                          ).grid(row=2, column=1, sticky="w",
                                 pady=(2, 8), padx=(0, 10))
         elif has_evidence:
-            ev_box = ctk.CTkTextbox(card, font=("Consolas", 9),
+            ev_box = ctk.CTkTextbox(card, font=("Consolas", 10),
                                     fg_color="#0a0e1a",
                                     text_color=C["text_dim"],
                                     border_color=C["border_dim"],
@@ -314,8 +314,8 @@ class ReportWindow(ctk.CTkToplevel):
             ev_box.configure(state="disabled")
         else:
             ctk.CTkLabel(card, text="No findings",
-                         font=("Consolas", 9),
-                         text_color=C["text_muted"],
+                         font=("Consolas", 10),
+                         text_color=C["text_dim"],
                          anchor="w"
                          ).grid(row=2, column=1, sticky="w", pady=(2, 8))
 

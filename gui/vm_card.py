@@ -1,20 +1,8 @@
 """
 gui/vm_card.py — VM card with embedded SeverityDonut chart.
 
-PART 3 of 5 in the UI rebuild:
-  1. gui/charts.py          <- chart primitives (SeverityDonut used here)
-  2. requirements.txt       <- added matplotlib
-  3. gui/vm_card.py          <- this file
-  4. gui/report_panel.py    <- (next) full dashboard report window
-  5. gui/app.py             <- (last) main window + fleet overview chart
-
-Bug fixes vs previous version:
-  - Donut chart now actually updates on re-hunt (old canvas bars never reset
-    cleanly between hunts)
-  - Hover state no longer overrides the "Hunting"/"Done"/"Error" border color
-  - Badge width fixed so longer status text ("Hunting", "Offline") doesn't
-    get clipped
-  - Report button state resets correctly if a VM is re-hunted after error
+Contrast/readability pass: font sizes bumped +1-2pt, colors pulled from the
+brightened palette in gui/charts.py (C dict).
 """
 
 import threading
@@ -24,7 +12,7 @@ from hunting.models import Report
 from gui.charts import SeverityDonut, C
 
 STATUS_COLOR = {
-    "Unknown": "#475569",
+    "Unknown": "#a8b8d0",
     "Online":  "#22c55e",
     "Offline": "#ef4444",
     "Hunting": "#f59e0b",
@@ -69,7 +57,7 @@ class VMCard(ctk.CTkFrame):
 
     # ── Hover (only affects fill, never border) ─────────────────────────────────
     def _on_hover(self, _=None):
-        self.configure(fg_color=C["card_hover"] if "card_hover" in C else "#1e293b")
+        self.configure(fg_color="#222d45")
 
     def _on_leave(self, _=None):
         self.configure(fg_color=C["card"])
@@ -80,26 +68,26 @@ class VMCard(ctk.CTkFrame):
 
         # Status dot
         self.dot = ctk.CTkLabel(self, text="○",
-                                font=("Consolas", 16),
+                                font=("Consolas", 18),
                                 text_color=STATUS_COLOR["Unknown"], width=24)
         self.dot.grid(row=0, column=0, rowspan=3, padx=(12, 4), pady=10, sticky="n")
 
         # Hostname
         hostname = self.vm_config.get("hostname", self.vm_config.get("host", "Unknown"))
         self.lbl_name = ctk.CTkLabel(self, text=hostname,
-                                     font=("JetBrains Mono", 12, "bold"),
+                                     font=("JetBrains Mono", 14, "bold"),
                                      text_color=C["text"], anchor="w")
         self.lbl_name.grid(row=0, column=1, sticky="w", pady=(10, 0))
 
         # host:port · user
         info = f"{self.vm_config.get('host','')}:{self.vm_config.get('port',22)}  ·  {self.vm_config.get('username','')}"
-        ctk.CTkLabel(self, text=info, font=("Consolas", 9),
-                     text_color=C["text_muted"], anchor="w"
+        ctk.CTkLabel(self, text=info, font=("Consolas", 10),
+                     text_color=C["text_dim"], anchor="w"
                      ).grid(row=1, column=1, sticky="w")
 
         # Progress / detail label
         self.lbl_detail = ctk.CTkLabel(self, text="",
-                                       font=("Consolas", 9),
+                                       font=("Consolas", 10),
                                        text_color=C["text_dim"], anchor="w")
         self.lbl_detail.grid(row=2, column=1, sticky="w", pady=(0, 8))
 
@@ -110,38 +98,38 @@ class VMCard(ctk.CTkFrame):
 
         # Status badge — fixed width so "Hunting"/"Offline" don't clip
         self.badge = ctk.CTkLabel(self, text="—",
-                                  font=("Consolas", 9),
-                                  fg_color="#1a2744",
+                                  font=("Consolas", 10, "bold"),
+                                  fg_color="#222d45",
                                   corner_radius=4,
-                                  text_color=C["text_muted"],
-                                  width=72, height=20)
+                                  text_color=C["text_dim"],
+                                  width=72, height=22)
         self.badge.grid(row=0, column=3, padx=(0, 4), pady=(10, 0), sticky="e")
 
         # Buttons
         btn_wrap = ctk.CTkFrame(self, fg_color="transparent")
         btn_wrap.grid(row=1, column=3, rowspan=2, padx=(0, 10), pady=(0, 8))
 
-        b_cfg = dict(font=("Consolas", 10), height=26, corner_radius=5,
+        b_cfg = dict(font=("Consolas", 11), height=27, corner_radius=5,
                      border_width=1)
 
         self.btn_test = ctk.CTkButton(
-            btn_wrap, text="Test", width=54,
-            fg_color="transparent", hover_color="#1e293b",
-            text_color=C["text_dim"], border_color=C["border_dim"],
+            btn_wrap, text="Test", width=56,
+            fg_color="transparent", hover_color="#27344f",
+            text_color=C["text"], border_color=C["border"],
             **b_cfg, command=self.test_conn)
         self.btn_test.pack(side="left", padx=(0, 4))
 
         self.btn_hunt = ctk.CTkButton(
-            btn_wrap, text="Hunt", width=54,
-            fg_color="transparent", hover_color="#1c1400",
-            text_color=C["amber"], border_color="#3d2e00",
+            btn_wrap, text="Hunt", width=56,
+            fg_color="transparent", hover_color="#2a1f00",
+            text_color=C["amber"], border_color="#5a4200",
             **b_cfg, command=self.hunt)
         self.btn_hunt.pack(side="left", padx=(0, 4))
 
         self.btn_report = ctk.CTkButton(
-            btn_wrap, text="Report", width=60,
-            fg_color="transparent", hover_color="#1e293b",
-            text_color=C["text_muted"], border_color=C["border_dim"],
+            btn_wrap, text="Report", width=62,
+            fg_color="transparent", hover_color="#27344f",
+            text_color=C["text_dim"], border_color=C["border_dim"],
             state="disabled",
             **b_cfg, command=self._open_report)
         self.btn_report.pack(side="left")
@@ -149,10 +137,10 @@ class VMCard(ctk.CTkFrame):
     # ── Public API ─────────────────────────────────────────────────────────────
     def set_status(self, status: str, detail: str = ""):
         self._status = status
-        color = STATUS_COLOR.get(status, C["text_muted"])
+        color = STATUS_COLOR.get(status, C["text_dim"])
         icon  = STATUS_ICON.get(status, "○")
         self.dot.configure(text=icon, text_color=color)
-        self.badge.configure(text=status, text_color=color, fg_color="#1a2744")
+        self.badge.configure(text=status, text_color=color, fg_color="#222d45")
         self.configure(border_color=BORDER_COLOR.get(status, C["border_dim"]))
 
         if detail:
@@ -174,10 +162,9 @@ class VMCard(ctk.CTkFrame):
         self.report = report
 
         if report.error:
-            # Reset donut to empty state on error
             self.donut.update({"HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0})
             self.btn_report.configure(state="disabled",
-                                      text_color=C["text_muted"],
+                                      text_color=C["text_dim"],
                                       border_color=C["border_dim"])
             return
 
@@ -227,7 +214,6 @@ class VMCard(ctk.CTkFrame):
     def hunt(self):
         self.set_status("Hunting", "Initializing…")
         self.set_buttons(False)
-        # Reset donut to neutral while hunting
         self.donut.update({"HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0})
 
         def progress_cb(cur, tot, name):

@@ -1,18 +1,8 @@
 """
 gui/charts.py — Reusable matplotlib chart widgets, Splunk-dashboard style.
 
-PART 1 of 5 in the UI rebuild:
-  1. gui/charts.py          <- this file (chart primitives)
-  2. hunting/models.py      <- adds timestamp/IP fields needed by charts
-  3. gui/vm_card.py         <- VM card using SeverityDonut from this file
-  4. gui/report_panel.py    <- dashboard report window using all charts here
-  5. gui/app.py             <- main window wiring + fleet overview chart
-
-All charts are embedded matplotlib Figures inside customtkinter frames,
-styled to match the dark navy theme. Each chart class exposes:
-  - __init__(parent, **kwargs)  -> builds empty/placeholder chart
-  - update(data)                -> redraws with new data
-  - widget                       -> the actual tk widget to grid/pack
+Contrast/readability pass: text colors brightened against dark backgrounds,
+font sizes bumped ~1-2pt across all chart labels, titles, and ticks.
 """
 
 import tkinter as tk
@@ -39,9 +29,9 @@ C = {
     "red":        "#ef4444",
     "green":      "#22c55e",
     "purple":     "#a855f7",
-    "text":       "#f1f5f9",
-    "text_dim":   "#94a3b8",
-    "text_muted": "#475569",
+    "text":       "#ffffff",
+    "text_dim":   "#cbd5e1",
+    "text_muted": "#8b9bb4",
     "HIGH":       "#ef4444",
     "MEDIUM":     "#f59e0b",
     "LOW":        "#22c55e",
@@ -51,6 +41,14 @@ C = {
 SEV_ORDER  = ["HIGH", "MEDIUM", "LOW", "INFO"]
 SEV_COLORS = [C["HIGH"], C["MEDIUM"], C["LOW"], C["INFO"]]
 
+# ─── Font size scale (bumped +1 to +2pt from the original pass) ──────────────
+FS_TINY   = 8    # tile sub-labels, legend entries
+FS_SMALL  = 9    # axis ticks, IP labels
+FS_BASE   = 10   # axis labels, bar value labels
+FS_MED    = 11   # chart titles, donut center (small mode)
+FS_LARGE  = 16   # donut center total (full mode)
+FS_XLARGE = 20   # donut center total (emphasis)
+
 
 def _style_axes(ax, fig):
     """Apply consistent dark theme styling to a matplotlib axes."""
@@ -58,7 +56,7 @@ def _style_axes(ax, fig):
     ax.set_facecolor(C["panel"])
     for spine in ax.spines.values():
         spine.set_color(C["border_dim"])
-    ax.tick_params(colors=C["text_muted"], labelsize=8)
+    ax.tick_params(colors=C["text_dim"], labelsize=FS_SMALL)
     ax.xaxis.label.set_color(C["text_dim"])
     ax.yaxis.label.set_color(C["text_dim"])
     ax.title.set_color(C["text"])
@@ -89,7 +87,7 @@ class BaseChart:
 
     def clear_message(self, ax, message="No data yet"):
         ax.text(0.5, 0.5, message, ha="center", va="center",
-                color=C["text_muted"], fontsize=9, transform=ax.transAxes)
+                color=C["text_dim"], fontsize=FS_BASE, transform=ax.transAxes)
         ax.set_xticks([])
         ax.set_yticks([])
 
@@ -111,7 +109,7 @@ class SeverityDonut(BaseChart):
                     wedgeprops=dict(width=0.42, edgecolor=C["panel"]))
         if not self.small:
             self.ax.text(0, 0, "—", ha="center", va="center",
-                         color=C["text_muted"], fontsize=14, weight="bold")
+                         color=C["text_dim"], fontsize=FS_MED, weight="bold")
         self._redraw()
 
     def update(self, counts: dict):
@@ -126,7 +124,6 @@ class SeverityDonut(BaseChart):
             self._draw_empty()
             return
 
-        # Only show non-zero slices, but keep color mapping consistent
         nz_values, nz_colors = [], []
         for v, c in zip(values, SEV_COLORS):
             if v > 0:
@@ -139,12 +136,12 @@ class SeverityDonut(BaseChart):
             startangle=90)
 
         center_text = str(total)
-        center_size = 18 if not self.small else 13
+        center_size = FS_XLARGE if not self.small else FS_LARGE - 2
         self.ax.text(0, 0, center_text, ha="center", va="center",
                      color=C["text"], fontsize=center_size, weight="bold")
         if not self.small:
             self.ax.text(0, -0.28, "findings", ha="center", va="center",
-                         color=C["text_muted"], fontsize=7)
+                         color=C["text_dim"], fontsize=FS_SMALL)
 
         self._redraw()
 
@@ -177,7 +174,7 @@ class SeverityBarChart(BaseChart):
         y_pos = range(len(SEV_ORDER))
         bars = self.ax.barh(y_pos, values, color=SEV_COLORS, height=0.55)
         self.ax.set_yticks(y_pos)
-        self.ax.set_yticklabels(SEV_ORDER, fontsize=8)
+        self.ax.set_yticklabels(SEV_ORDER, fontsize=FS_SMALL, color=C["text"], weight="bold")
         self.ax.invert_yaxis()
         max_v = max(values) if max(values) > 0 else 1
         self.ax.set_xlim(0, max_v * 1.25)
@@ -187,8 +184,8 @@ class SeverityBarChart(BaseChart):
                 self.ax.text(bar.get_width() + max_v * 0.03,
                              bar.get_y() + bar.get_height()/2,
                              str(val), va="center", ha="left",
-                             color=C["text"], fontsize=9, weight="bold")
-        self.ax.set_title(self.title, fontsize=9, loc="left")
+                             color=C["text"], fontsize=FS_BASE, weight="bold")
+        self.ax.set_title(self.title, fontsize=FS_MED, loc="left", color=C["text"])
         self._redraw()
 
 
@@ -254,15 +251,15 @@ class FindingsTimeline(BaseChart):
         labels = [h.strftime("%H:%M") for h in hours]
 
         self.ax.plot(range(len(hours)), counts, color=C["accent"],
-                     marker="o", markersize=4, linewidth=1.6)
-        self.ax.fill_between(range(len(hours)), counts, color=C["accent"], alpha=0.12)
+                     marker="o", markersize=4, linewidth=1.8)
+        self.ax.fill_between(range(len(hours)), counts, color=C["accent"], alpha=0.15)
 
         step = max(1, len(hours) // 8)
         self.ax.set_xticks(range(0, len(hours), step))
         self.ax.set_xticklabels([labels[i] for i in range(0, len(hours), step)],
-                                rotation=0, fontsize=7)
-        self.ax.set_title(self.title, fontsize=9, loc="left")
-        self.ax.set_ylabel("events", fontsize=8)
+                                rotation=0, fontsize=FS_SMALL, color=C["text_dim"])
+        self.ax.set_title(self.title, fontsize=FS_MED, loc="left", color=C["text"])
+        self.ax.set_ylabel("events", fontsize=FS_BASE, color=C["text_dim"])
         self._redraw()
 
 
@@ -303,9 +300,10 @@ class TopIPsChart(BaseChart):
         ips, counts = zip(*top)
         y_pos = range(len(ips))
 
-        bars = self.ax.barh(y_pos, counts, color=C["red"], height=0.5, alpha=0.85)
+        bars = self.ax.barh(y_pos, counts, color=C["red"], height=0.5, alpha=0.9)
         self.ax.set_yticks(y_pos)
-        self.ax.set_yticklabels(ips, fontsize=8, family="monospace")
+        self.ax.set_yticklabels(ips, fontsize=FS_SMALL, family="monospace",
+                                color=C["text"], weight="bold")
         self.ax.invert_yaxis()
 
         max_c = max(counts)
@@ -314,9 +312,9 @@ class TopIPsChart(BaseChart):
             self.ax.text(bar.get_width() + max_c * 0.03,
                          bar.get_y() + bar.get_height()/2,
                          str(val), va="center", ha="left",
-                         color=C["text"], fontsize=8, weight="bold")
+                         color=C["text"], fontsize=FS_BASE, weight="bold")
 
-        self.ax.set_title(self.title, fontsize=9, loc="left")
+        self.ax.set_title(self.title, fontsize=FS_MED, loc="left", color=C["text"])
         self._redraw()
 
 
@@ -344,7 +342,7 @@ class CheckStatusGrid(BaseChart):
             self.ax.add_patch(plt.Rectangle((i, 0), 0.9, 0.9,
                               facecolor=C["border_dim"], edgecolor="none"))
             self.ax.text(i + 0.45, 0.45, str(i+1), ha="center", va="center",
-                         color=C["text_muted"], fontsize=9, weight="bold")
+                         color=C["text_dim"], fontsize=FS_BASE, weight="bold")
         self.ax.set_xlim(0, self.n_checks)
         self.ax.set_ylim(0, 1)
         self._redraw()
@@ -360,10 +358,10 @@ class CheckStatusGrid(BaseChart):
         for i, f in enumerate(findings):
             if f.skipped:
                 color = "#1a2233"
-                txt_color = C["text_muted"]
+                txt_color = C["text_dim"]
             elif f.evidence:
                 color = C[f.severity]
-                txt_color = C["bg"]
+                txt_color = "#0a0e1a"
             else:
                 color = "#16321f"
                 txt_color = C["green"]
@@ -371,15 +369,14 @@ class CheckStatusGrid(BaseChart):
             self.ax.add_patch(plt.Rectangle((i, 0), 0.9, 0.9,
                               facecolor=color, edgecolor=C["border_dim"], linewidth=0.5))
             self.ax.text(i + 0.45, 0.45, str(f.check_id), ha="center", va="center",
-                         color=txt_color, fontsize=9, weight="bold")
-            # short label below
+                         color=txt_color, fontsize=FS_BASE, weight="bold")
             label = f.check_name.split()[0][:6]
-            self.ax.text(i + 0.45, -0.18, label, ha="center", va="top",
-                         color=C["text_muted"], fontsize=6, rotation=0)
+            self.ax.text(i + 0.45, -0.2, label, ha="center", va="top",
+                         color=C["text_dim"], fontsize=FS_TINY, rotation=0)
 
         self.ax.set_xlim(0, self.n_checks)
-        self.ax.set_ylim(-0.4, 1)
-        self.ax.set_title(self.title, fontsize=9, loc="left", pad=2)
+        self.ax.set_ylim(-0.42, 1)
+        self.ax.set_title(self.title, fontsize=FS_MED, loc="left", pad=2, color=C["text"])
         self._redraw()
 
 
@@ -423,9 +420,9 @@ class FleetOverviewChart(BaseChart):
             left = [l + v for l, v in zip(left, values)]
 
         self.ax.set_yticks(y_pos)
-        self.ax.set_yticklabels(names, fontsize=8)
+        self.ax.set_yticklabels(names, fontsize=FS_SMALL, color=C["text"], weight="bold")
         self.ax.invert_yaxis()
-        self.ax.legend(loc="lower right", fontsize=7, frameon=False,
+        self.ax.legend(loc="lower right", fontsize=FS_TINY, frameon=False,
                        labelcolor=C["text_dim"], ncol=4)
-        self.ax.set_title(self.title, fontsize=9, loc="left")
+        self.ax.set_title(self.title, fontsize=FS_MED, loc="left", color=C["text"])
         self._redraw()
