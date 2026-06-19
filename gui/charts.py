@@ -1,8 +1,11 @@
 """
 gui/charts.py — Reusable matplotlib chart widgets, Splunk-dashboard style.
 
-Contrast/readability pass: text colors brightened against dark backgrounds,
-font sizes bumped ~1-2pt across all chart labels, titles, and ticks.
+v4.0 FIXES:
+  - FindingsTimeline: Fixed Windows timestamp parsing (.NET Date format)
+  - FindingsTimeline: Changed from line chart to stacked bar chart
+  - FindingsTimeline: Shows all 24 hours including empty ones
+  - FindingsTimeline: Proper chronological order with date context
 """
 
 import tkinter as tk
@@ -12,8 +15,8 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
-from collections import Counter
-from datetime import datetime
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta
 import re
 
 # ─── Shared palette (mirrors gui/app.py C dict — keep in sync) ────────────────
@@ -42,16 +45,15 @@ SEV_ORDER  = ["HIGH", "MEDIUM", "LOW", "INFO"]
 SEV_COLORS = [C["HIGH"], C["MEDIUM"], C["LOW"], C["INFO"]]
 
 # ─── Font size scale (bumped +1 to +2pt from the original pass) ──────────────
-FS_TINY   = 8    # tile sub-labels, legend entries
-FS_SMALL  = 9    # axis ticks, IP labels
-FS_BASE   = 10   # axis labels, bar value labels
-FS_MED    = 11   # chart titles, donut center (small mode)
-FS_LARGE  = 16   # donut center total (full mode)
-FS_XLARGE = 20   # donut center total (emphasis)
+FS_TINY   = 8
+FS_SMALL  = 9
+FS_BASE   = 10
+FS_MED    = 11
+FS_LARGE  = 16
+FS_XLARGE = 20
 
 
 def _style_axes(ax, fig):
-    """Apply consistent dark theme styling to a matplotlib axes."""
     fig.patch.set_facecolor(C["panel"])
     ax.set_facecolor(C["panel"])
     for spine in ax.spines.values():
@@ -64,8 +66,6 @@ def _style_axes(ax, fig):
 
 
 class BaseChart:
-    """Common scaffolding: Figure + Canvas inside a CTkFrame."""
-
     def __init__(self, parent, figsize=(4, 2.4), dpi=90, title=""):
         self.frame = ctk.CTkFrame(parent, fg_color=C["panel"],
                                   corner_radius=8, border_width=1,
@@ -92,7 +92,6 @@ class BaseChart:
         ax.set_yticks([])
 
 
-# ─── 1. Severity Donut — per-VM card mini chart or report overview ────────────
 class SeverityDonut(BaseChart):
     """Donut chart showing HIGH/MEDIUM/LOW/INFO finding counts."""
 
@@ -113,7 +112,6 @@ class SeverityDonut(BaseChart):
         self._redraw()
 
     def update(self, counts: dict):
-        """counts = {'HIGH': n, 'MEDIUM': n, 'LOW': n, 'INFO': n}"""
         self.ax.clear()
         self.ax.set_facecolor(C["panel"])
 
@@ -146,10 +144,7 @@ class SeverityDonut(BaseChart):
         self._redraw()
 
 
-# ─── 2. Severity Bar — horizontal bars, used in report sidebar ────────────────
 class SeverityBarChart(BaseChart):
-    """Horizontal bar chart, one bar per severity level."""
-
     def __init__(self, parent, figsize=(3.2, 2.0), dpi=90):
         super().__init__(parent, figsize=figsize, dpi=dpi, title="Findings by Severity")
         self.ax = self.fig.add_subplot(111)
@@ -189,16 +184,27 @@ class SeverityBarChart(BaseChart):
         self._redraw()
 
 
-# ─── 3. Findings Timeline — events over time (line/scatter) ──────────────────
 class FindingsTimeline(BaseChart):
     """
-    Line chart of finding-evidence counts over time, bucketed by hour.
-    Splunk-style 'events over time' panel.
+    Timeline chart showing event distribution over the last 24 hours.
+    Uses stacked bar chart with color-coded severity levels.
+
+    v4.0 FIXES:
+      - Added Windows .NET Date format parsing (/Date(1781878819550)/)
+      - Changed from line chart to stacked bar chart (better for discrete events)
+      - Shows all 24 hours including empty ones (as 0)
+      - Proper chronological order (left-to-right, past-to-future)
+      - Date context in title and x-axis labels
     """
 
+    # Timestamp patterns to match various log formats
     TS_PATTERNS = [
-        re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"),          # ISO8601
-        re.compile(r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})"),           # syslog "Jun  8 14:23:01"
+        # ISO format: 2024-06-19T17:33:45
+        (re.compile(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"), "%Y-%m-%dT%H:%M:%S"),
+        # Linux syslog: Jun 19 17:33:45
+        (re.compile(r"(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})"), "%b %d %H:%M:%S"),
+        # Windows Event Log: /Date(1781878819550)/ (JSON .NET format)
+        (re.compile(r"/Date\((\d+)\)/"), "epoch_ms"),
     ]
 
     def __init__(self, parent, figsize=(7.5, 2.2), dpi=90):
@@ -209,64 +215,112 @@ class FindingsTimeline(BaseChart):
     def _draw_empty(self):
         self.ax.clear()
         _style_axes(self.ax, self.fig)
-        self.clear_message(self.ax, "No timestamped events")
+        self.ax.text(0.5, 0.5, "No timestamped events", ha="center", va="center",
+                     color=C["text_dim"], fontsize=FS_BASE, transform=self.ax.transAxes)
+        self.ax.set_xticks([])
+        self.ax.set_yticks([])
         self._redraw()
 
-    def _extract_hour(self, line: str, fallback_year: int):
-        for pat in self.TS_PATTERNS:
-            m = pat.search(line)
+    def _parse_timestamp(self, line: str):
+        """Parse timestamp from various formats including Windows .NET Date."""
+        now = datetime.now()
+
+        for pattern, fmt in self.TS_PATTERNS:
+            m = pattern.search(line)
             if not m:
                 continue
             raw = m.group(1)
-            for fmt in ("%Y-%m-%dT%H:%M:%S", "%b %d %H:%M:%S"):
-                try:
+
+            try:
+                if fmt == "epoch_ms":
+                    # Handle .NET JSON Date format: /Date(1781878819550)/
+                    epoch_ms = int(raw)
+                    dt = datetime.fromtimestamp(epoch_ms / 1000)
+                elif fmt == "%b %d %H:%M:%S":
                     dt = datetime.strptime(raw, fmt)
-                    if fmt == "%b %d %H:%M:%S":
-                        dt = dt.replace(year=fallback_year)
-                    return dt.replace(minute=0, second=0, microsecond=0)
-                except ValueError:
-                    continue
+                    dt = dt.replace(year=now.year)
+                else:
+                    dt = datetime.strptime(raw, fmt)
+                return dt.replace(minute=0, second=0, microsecond=0)
+            except (ValueError, OSError):
+                continue
         return None
 
     def update(self, findings: list):
-        """findings = list of Finding objects (with .evidence lists)"""
+        """Update timeline with findings from the last 24 hours."""
         self.ax.clear()
         _style_axes(self.ax, self.fig)
 
         now = datetime.now()
-        bucket = Counter()
-        for f in findings:
-            for line in (f.evidence or []):
-                hour = self._extract_hour(line, now.year)
-                if hour:
-                    bucket[hour] += 1
+        cutoff = now - timedelta(hours=24)
 
-        if not bucket:
-            self.clear_message(self.ax, "No timestamped events")
-            self._redraw()
+        # Collect events by hour and severity
+        hourly = defaultdict(lambda: defaultdict(int))
+
+        for f in findings:
+            if not f.evidence or f.skipped:
+                continue
+            for line in f.evidence:
+                ts = self._parse_timestamp(line)
+                if ts and ts >= cutoff:
+                    hourly[ts][f.severity] += 1
+
+        if not hourly:
+            self._draw_empty()
             return
 
-        hours  = sorted(bucket.keys())
-        counts = [bucket[h] for h in hours]
-        labels = [h.strftime("%H:%M") for h in hours]
+        # Generate all 24 hours (including empty ones)
+        hours = []
+        current = cutoff.replace(minute=0, second=0, microsecond=0)
+        while current <= now:
+            hours.append(current)
+            current += timedelta(hours=1)
 
-        self.ax.plot(range(len(hours)), counts, color=C["accent"],
-                     marker="o", markersize=4, linewidth=1.8)
-        self.ax.fill_between(range(len(hours)), counts, color=C["accent"], alpha=0.15)
+        # Stacked bar chart by severity
+        sevs = ["HIGH", "MEDIUM", "LOW", "INFO"]
+        colors = [C["HIGH"], C["MEDIUM"], C["LOW"], C["INFO"]]
+        bottom = [0] * len(hours)
 
-        step = max(1, len(hours) // 8)
-        self.ax.set_xticks(range(0, len(hours), step))
-        self.ax.set_xticklabels([labels[i] for i in range(0, len(hours), step)],
-                                rotation=0, fontsize=FS_SMALL, color=C["text_dim"])
-        self.ax.set_title(self.title, fontsize=FS_MED, loc="left", color=C["text"])
-        self.ax.set_ylabel("events", fontsize=FS_BASE, color=C["text_dim"])
+        for sev, color in zip(sevs, colors):
+            counts = [hourly.get(h, {}).get(sev, 0) for h in hours]
+            if any(counts):
+                self.ax.bar(range(len(hours)), counts, bottom=bottom,
+                           color=color, width=0.8, alpha=0.85, label=sev)
+                bottom = [b + c for b, c in zip(bottom, counts)]
+
+        # X-axis labels
+        step = max(1, len(hours) // 6)
+        ticks = list(range(0, len(hours), step))
+        labels = []
+        for i in ticks:
+            h = hours[i]
+            if h.day != now.day:
+                labels.append(h.strftime("%b %d\n%H:00"))
+            else:
+                labels.append(h.strftime("%H:00"))
+
+        self.ax.set_xticks(ticks)
+        self.ax.set_xticklabels(labels, fontsize=FS_SMALL, color=C["text_dim"])
+
+        max_total = max(bottom) if bottom else 0
+        self.ax.set_ylim(0, max(max_total * 1.2, 1))
+        self.ax.set_ylabel("Events", fontsize=FS_BASE, color=C["text_dim"])
+
+        # Title with date range
+        title_text = f"Events Over Time ({hours[0].strftime('%b %d %H:%M')} - {hours[-1].strftime('%b %d %H:%M')})"
+        self.ax.set_title(title_text, fontsize=FS_MED, loc="left", color=C["text"], pad=10)
+
+        if any(any(hourly.get(h, {}).get(sev, 0) for h in hours) for sev in sevs):
+            self.ax.legend(loc="upper right", fontsize=FS_SMALL, frameon=False,
+                          labelcolor=C["text_dim"], ncol=4)
+
+        self.ax.grid(True, axis="y", color=C["border_dim"], linewidth=0.5, alpha=0.4)
+        self.ax.set_axisbelow(True)
+
         self._redraw()
 
 
-# ─── 4. Top Source IPs — horizontal bar of attacker IPs ───────────────────────
 class TopIPsChart(BaseChart):
-    """Top source IPs seen across all findings' evidence lines."""
-
     IP_RE = re.compile(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b")
 
     def __init__(self, parent, figsize=(3.6, 2.2), dpi=90, top_n=5):
@@ -318,13 +372,7 @@ class TopIPsChart(BaseChart):
         self._redraw()
 
 
-# ─── 5. Check Status Grid — small multiples, one cell per check ───────────────
 class CheckStatusGrid(BaseChart):
-    """
-    Grid of small colored tiles, one per check, color = severity if findings
-    exist, gray if clean, dark if skipped. Splunk single-value-panel style.
-    """
-
     def __init__(self, parent, figsize=(7.5, 1.4), dpi=90, n_checks=8):
         super().__init__(parent, figsize=figsize, dpi=dpi, title="Check Status")
         self.n_checks = n_checks
@@ -380,13 +428,7 @@ class CheckStatusGrid(BaseChart):
         self._redraw()
 
 
-# ─── 6. Fleet Overview — stacked bar across all VMs ───────────────────────────
 class FleetOverviewChart(BaseChart):
-    """
-    Stacked horizontal bar chart: one row per VM, segments = HIGH/MED/LOW/INFO.
-    Used in the main window sidebar/dashboard for a fleet-wide view.
-    """
-
     def __init__(self, parent, figsize=(3.6, 3.0), dpi=90):
         super().__init__(parent, figsize=figsize, dpi=dpi, title="Fleet Overview")
         self.ax = self.fig.add_subplot(111)
@@ -399,7 +441,6 @@ class FleetOverviewChart(BaseChart):
         self._redraw()
 
     def update(self, vm_reports: list):
-        """vm_reports = list of (vm_name, counts_dict)"""
         self.ax.clear()
         _style_axes(self.ax, self.fig)
 

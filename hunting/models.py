@@ -27,6 +27,7 @@ class Report:
     timestamp: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     findings:  List[Finding] = field(default_factory=list)
     error:     Optional[str] = None
+    os_type:   str = "unknown"
 
     @property
     def high_count(self):
@@ -50,6 +51,7 @@ class Report:
             "host":      self.host,
             "timestamp": self.timestamp,
             "error":     self.error,
+            "os_type":   self.os_type,
             "summary": {
                 "HIGH":   self.high_count,
                 "MEDIUM": self.medium_count,

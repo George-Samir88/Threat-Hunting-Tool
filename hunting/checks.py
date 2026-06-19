@@ -1,6 +1,6 @@
 """
-hunting/checks.py — Individual hunt check functions
-Each check receives log content (str) or an SSHTransport, returns a Finding.
+hunting/checks.py — Individual Linux hunt check functions.
+Each check receives an SSHTransport and returns a Finding.
 """
 import re
 from collections import defaultdict
@@ -17,7 +17,8 @@ KNOWN_GOOD_PACKAGES   = {
     "sudo", "python3", "systemd", "apt", "dpkg", "vim", "curl", "wget",
     # system packages commonly installed during setup — extend as needed
     "rsyslog", "auditd", "libauparse0t64", "libauplugin1",
-    "libestr0", "libfastjson4", "liblognorm5",
+    "libestr0", "libfastjson4", "liblognorm5", "kali",
+    "libc", "man", "libaudit", "libcap",
 }
 
 # Dict: regex pattern → human-readable label
@@ -38,16 +39,17 @@ RFC1918 = re.compile(
     r"^(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+)$"
 )
 
-# Log file paths — primary + fallback
+# Log file paths — primary + fallback (Debian/Kali first, RHEL/CentOS fallback)
 AUTH_LOGS  = ["/var/log/auth.log",        "/var/log/secure"]
 CRON_LOGS  = ["/var/log/cron",            "/var/log/syslog"]
-PKG_LOGS   = ["/var/log/yum.log",         "/var/log/dpkg.log", "/var/log/dnf.log"]
+PKG_LOGS   = ["/var/log/dpkg.log",        "/var/log/apt/history.log",
+              "/var/log/yum.log",         "/var/log/dnf.log"]
 AUDIT_LOGS = ["/var/log/audit/audit.log"]
-HISTORY    = [
+HISTORY_PATHS = [
     "/home/georgesamir/.bash_history",
+    "/home/georgesamir/.zsh_history",
     "/home/analyst/.bash_history",
     "/root/.bash_history",
-    "/home/georgesamir/.zsh_history",
     "/root/.zsh_history",
 ]
 
@@ -67,30 +69,24 @@ def _fetch_first_available(ssh: SSHTransport, paths: list) -> tuple:
 # ─── Check 1 — SSH Brute Force ────────────────────────────────────────────────
 def check_ssh_brute_force(ssh: SSHTransport) -> Finding:
     path, content = _fetch_first_available(ssh, AUTH_LOGS)
-
     finding = Finding(
         check_id=1,
         check_name="SSH Brute Force",
         severity="HIGH",
         description="",
     )
-
     if not content:
         finding.skipped = True
         finding.skip_reason = f"Log not found: {AUTH_LOGS}"
         return finding
-
     pattern  = re.compile(r"Failed password.*?from\s+([\d\.]+)\s+port", re.IGNORECASE)
     failures = defaultdict(list)
-
     for line in content.splitlines():
         m = pattern.search(line)
         if m:
             failures[m.group(1)].append(line)
-
     evidence     = []
     max_severity = "LOW"
-
     for ip, lines in failures.items():
         if len(lines) >= 5:
             sev = "MEDIUM" if RFC1918.match(ip) else "HIGH"
@@ -102,7 +98,6 @@ def check_ssh_brute_force(ssh: SSHTransport) -> Finding:
             evidence.extend(lines[:5])
             if len(lines) > 5:
                 evidence.append(f"  ... ({len(lines) - 5} more lines)")
-
     finding.severity    = max_severity if evidence else "INFO"
     finding.description = (
         f"Brute force detected from "
@@ -118,25 +113,20 @@ def check_ssh_brute_force(ssh: SSHTransport) -> Finding:
 # ─── Check 2 — Successful Login After Failures ────────────────────────────────
 def check_login_after_failures(ssh: SSHTransport) -> Finding:
     path, content = _fetch_first_available(ssh, AUTH_LOGS)
-
     finding = Finding(
         check_id=2,
         check_name="Successful Login After Failures",
         severity="HIGH",
         description="",
     )
-
     if not content:
         finding.skipped = True
         finding.skip_reason = f"Log not found: {AUTH_LOGS}"
         return finding
-
     fail_pattern    = re.compile(r"Failed password.*?from\s+([\d\.]+)", re.IGNORECASE)
     success_pattern = re.compile(r"Accepted\s+\w+\s+for\s+\S+\s+from\s+([\d\.]+)", re.IGNORECASE)
-
     failures  = defaultdict(int)
     successes = {}
-
     for line in content.splitlines():
         m = fail_pattern.search(line)
         if m:
@@ -144,13 +134,11 @@ def check_login_after_failures(ssh: SSHTransport) -> Finding:
         m = success_pattern.search(line)
         if m:
             successes[m.group(1)] = line
-
     evidence = []
     for ip, line in successes.items():
         if failures[ip] >= 3:
             evidence.append(f"IP {ip} had {failures[ip]} failures then succeeded:")
             evidence.append(f"  {line}")
-
     finding.description = (
         f"Credential stuffing indicator: {len(evidence) // 2} IP(s) succeeded after failures. "
         f"Source: {path}"
@@ -164,19 +152,16 @@ def check_login_after_failures(ssh: SSHTransport) -> Finding:
 # ─── Check 3 — Sudo Abuse ─────────────────────────────────────────────────────
 def check_sudo_abuse(ssh: SSHTransport) -> Finding:
     path, content = _fetch_first_available(ssh, AUTH_LOGS)
-
     finding = Finding(
         check_id=3,
         check_name="Sudo Abuse",
         severity="HIGH",
         description="",
     )
-
     if not content:
         finding.skipped = True
         finding.skip_reason = f"Log not found: {AUTH_LOGS}"
         return finding
-
     evidence = []
     patterns = [
         # PID bracket is optional — logger-injected lines omit it.
@@ -191,7 +176,6 @@ def check_sudo_abuse(ssh: SSHTransport) -> Finding:
         (re.compile(r"\bsudo(?:\[\d+\])?:\s+(\S+)\s+:.*?COMMAND=(.*)", re.IGNORECASE),
          "Sudo command"),
     ]
-
     for line in content.splitlines():
         for pattern, label in patterns:
             m = pattern.search(line)
@@ -202,7 +186,6 @@ def check_sudo_abuse(ssh: SSHTransport) -> Finding:
                 evidence.append(f"[{label}] user={user}")
                 evidence.append(f"  {line.strip()}")
                 break
-
     finding.description = (
         f"Sudo abuse detected: {len(evidence) // 2} event(s). Source: {path}"
         if evidence else
@@ -215,23 +198,19 @@ def check_sudo_abuse(ssh: SSHTransport) -> Finding:
 # ─── Check 4 — New User / Group Created ──────────────────────────────────────
 def check_user_group_creation(ssh: SSHTransport) -> Finding:
     path, content = _fetch_first_available(ssh, AUTH_LOGS)
-
     finding = Finding(
         check_id=4,
         check_name="New User / Group Created",
         severity="HIGH",
         description="",
     )
-
     if not content:
         finding.skipped = True
         finding.skip_reason = f"Log not found: {AUTH_LOGS}"
         return finding
-
     # PID bracket is optional — logger-injected lines omit it
     pattern  = re.compile(r"\b(useradd|groupadd|usermod)(?:\[\d+\])?:", re.IGNORECASE)
     evidence = [line.strip() for line in content.splitlines() if pattern.search(line)]
-
     finding.description = (
         f"Account manipulation detected: {len(evidence)} event(s). Source: {path}"
         if evidence else
@@ -244,16 +223,15 @@ def check_user_group_creation(ssh: SSHTransport) -> Finding:
 # ─── Check 5 — Unexpected Cron Entries ───────────────────────────────────────
 def check_suspicious_cron(ssh: SSHTransport) -> Finding:
     path, content = _fetch_first_available(ssh, CRON_LOGS)
-
     finding = Finding(
         check_id=5,
         check_name="Unexpected Cron Entries",
         severity="MEDIUM",
         description="",
     )
-
     spool_evidence = []
     spool_dir      = None
+    users          = None
     try:
         for candidate in CRON_SPOOL_DIRS:
             # run_sudo uses Fabric's sudo runner with pty=True — password coerced to str
@@ -262,7 +240,6 @@ def check_suspicious_cron(ssh: SSHTransport) -> Finding:
                 spool_dir = candidate
                 users     = out
                 break
-
         if spool_dir and users:
             for user in users.splitlines():
                 user = user.strip()
@@ -280,17 +257,14 @@ def check_suspicious_cron(ssh: SSHTransport) -> Finding:
                         spool_evidence.append(f"[crontab:{user}] {line}")
     except Exception:
         pass
-
     if not content and not spool_evidence:
         finding.skipped = True
         finding.skip_reason = "No cron logs or spool entries found"
         return finding
-
     evidence = []
     if content:
         off_hours = re.compile(r"\s(0[0-5]):\d{2}:\d{2}\s")
         non_root  = re.compile(r"CROND.*?\((?!root|syslog|cron)(\S+)\)\s+CMD")
-
         for line in content.splitlines():
             if off_hours.search(line) and "CROND" in line:
                 evidence.append(f"[off-hours cron] {line.strip()}")
@@ -299,9 +273,7 @@ def check_suspicious_cron(ssh: SSHTransport) -> Finding:
                 user = m.group(1) if m else "unknown"
                 if user not in KNOWN_GOOD_CRON_USERS:
                     evidence.append(f"[non-root cron user={user}] {line.strip()}")
-
     evidence.extend(spool_evidence)
-
     finding.description = (
         f"Suspicious cron activity: {len(evidence)} event(s). "
         f"Source: {path or spool_dir or 'spool'}"
@@ -315,35 +287,32 @@ def check_suspicious_cron(ssh: SSHTransport) -> Finding:
 # ─── Check 6 — Unexpected Package Activity ───────────────────────────────────
 def check_package_activity(ssh: SSHTransport) -> Finding:
     path, content = _fetch_first_available(ssh, PKG_LOGS)
-
     finding = Finding(
         check_id=6,
         check_name="Unexpected Package Activity",
         severity="MEDIUM",
         description="",
     )
-
     if not content:
         finding.skipped = True
         finding.skip_reason = f"Log not found: {PKG_LOGS}"
         return finding
-
     # Match only explicit install/remove/purge actions — ignore status lines
     # dpkg.log format: "YYYY-MM-DD HH:MM:SS install|remove|purge pkg:arch old new"
+    # yum.log format:  "MMM DD HH:MM:SS install|remove|purge pkg"
     install_pattern = re.compile(
-        r"^\S+\s+\S+\s+(install|remove|purge)\s+([\w\-\.]+)",
+        r"^(?:\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}|\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+(install|remove|purge)\s+([\w\-\.]+)",
         re.IGNORECASE,
     )
     evidence = []
-
     for line in content.splitlines():
         m = install_pattern.match(line)
         if m:
             action  = m.group(1).lower()
             package = m.group(2).lower().split(":")[0].split("-")[0]
-            if package not in KNOWN_GOOD_PACKAGES:
+            base = re.split(r"[-_]\d", package)[0]
+            if base not in KNOWN_GOOD_PACKAGES:
                 evidence.append(f"[{action.upper()}] {line.strip()}")
-
     finding.description = (
         f"Unexpected package activity: {len(evidence)} event(s). Source: {path}"
         if evidence else
@@ -356,35 +325,30 @@ def check_package_activity(ssh: SSHTransport) -> Finding:
 # ─── Check 7 — Auditd Privilege Escalation ───────────────────────────────────
 def check_auditd_privesc(ssh: SSHTransport) -> Finding:
     path, content = _fetch_first_available(ssh, AUDIT_LOGS)
-
     finding = Finding(
         check_id=7,
         check_name="Auditd Privilege Escalation",
         severity="HIGH",
         description="",
     )
-
     if not content:
         finding.skipped = True
         finding.skip_reason = (
             "audit.log not found or auditd not running — "
-            "install with: sudo apt install auditd"
+            "install with: sudo apt install auditd && sudo systemctl enable auditd --now"
         )
         return finding
-
     sudo_su_pattern = re.compile(
         r'type=(USER_AUTH|USER_CMD|USER_START).*exe="/usr/bin/(sudo|su)".*(res=success|res=failed)',
         re.IGNORECASE,
     )
     userauth_pattern = re.compile(r"type=USER_AUTH.*res=failed", re.IGNORECASE)
     evidence = []
-
     for line in content.splitlines():
         if sudo_su_pattern.search(line):
             evidence.append(f"[PRIVESC] {line.strip()}")
         elif userauth_pattern.search(line):
             evidence.append(f"[AUTH failure] {line.strip()}")
-
     finding.description = (
         f"Privilege escalation via auditd: {len(evidence)} event(s). Source: {path}"
         if evidence else
@@ -402,24 +366,19 @@ def check_bash_history(ssh: SSHTransport) -> Finding:
         severity="HIGH",
         description="",
     )
-
-    path, content = _fetch_first_available(ssh, HISTORY)
-
+    path, content = _fetch_first_available(ssh, HISTORY_PATHS)
     if path is None:
         finding.skipped = True
         finding.skip_reason = "No history file readable"
         return finding
-
     if not content:
         finding.description = f"History file readable but empty. Source: {path}"
         return finding
-
     compiled = [
         (re.compile(pattern, re.IGNORECASE), label)
         for pattern, label in SUSPICIOUS_HISTORY_PATTERNS.items()
     ]
     evidence = []
-
     for line in content.splitlines():
         line = line.strip()
         if not line:
@@ -428,7 +387,6 @@ def check_bash_history(ssh: SSHTransport) -> Finding:
             if regex.search(line):
                 evidence.append(f"[{label}]  {line}")
                 break
-
     finding.description = (
         f"Suspicious commands in history: {len(evidence)} match(es). Source: {path}"
         if evidence else
