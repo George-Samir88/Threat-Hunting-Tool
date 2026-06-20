@@ -697,8 +697,7 @@ Then use `"host": "127.0.0.1"` and `"port": 2222` in `vms.json`.
 ## 👤 Author
 
 **George Samir**
-Cybersecurity Threat Hunting & Incident Response
-NTI — Threat Hunting & Incident Response Track
+Cybersecurity Threat Hunting & Incident Response Analyst
 
 [LinkedIn](https://linkedin.com/in/george-samir976327/) · [GitHub](https://github.com/George-Samir88)
 
