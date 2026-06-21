@@ -9,7 +9,6 @@
   <img src="images/Screenshot (14).png" width="400" alt="Windows Threat Hunt Report — Event log analysis, failed logins, and severity dashboard">
 </p>
 A professional, dark-themed desktop GUI for automated threat hunting across Linux and Windows VMs via SSH. Built with Python, customtkinter, matplotlib, and fabric.
-
 Supports both Linux OpenSSH and Windows OpenSSH Server with automatic OS detection, OS-specific check sets, and Splunk-inspired dashboards.
 ---
 
